@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>로그인</title>
+    <style>
+        body { font-family: sans-serif; max-width: 400px; margin: 5rem auto; padding: 0 1rem; text-align: center; }
+        form { display: flex; flex-direction: column; gap: 10px; border: 1px solid #ddd; padding: 2rem; border-radius: 8px; }
+        input { padding: 10px; border: 1px solid #ccc; border-radius: 4px; }
+        button { padding: 10px; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; }
+        .btn-login { background-color: #007bff; color: white; }
+        .btn-register { background-color: #28a745; color: white; margin-top: 5px; }
+    </style>
+</head>
+<body>
+
+<h1>🔒 로그인</h1>
+
+<form id="authForm">
+    <input type="text" id="username" placeholder="아이디" required>
+    <input type="password" id="password" placeholder="비밀번호" required>
+
+    <button type="submit" class="btn-login" onclick="login(event)">로그인</button>
+    <button type="button" class="btn-register" onclick="register()">회원가입</button>
+</form>
+
+<script>
+    // 1. 회원가입 함수
+    async function register() {
+        const username = document.getElementById('username').value;
+        const password = document.getElementById('password').value;
+
+        if(!username || !password) return alert('아이디와 비밀번호를 입력하세요.');
+
+        const res = await fetch('/api/auth/register', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, password })
+        });
+
+        if (res.ok) alert('회원가입 성공! 이제 로그인해 주세요.');
+        else alert('회원가입 실패 (이미 존재하는 아이디일 수 있습니다).');
+    }
+
+    // 2. 로그인 함수
+    async function login(e) {
+        e.preventDefault(); // 폼 제출 새로고침 방지
+        const username = document.getElementById('username').value;
+        const password = document.getElementById('password').value;
+
+        const res = await fetch('/api/auth/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, password })
+        });
+
+        if (res.ok) {
+            const tokens = await res.json();
+            // 🔑 토큰을 브라우저에 저장
+            localStorage.setItem('accessToken', tokens.accessToken);
+            localStorage.setItem('refreshToken', tokens.refreshToken);
+            localStorage.setItem('username', username);
+
+            alert('로그인 성공!');
+            window.location.href = '/index.html'; // 방명록 화면으로 이동
+        } else {
+            alert('로그인 실패! 아이디나 비밀번호를 확인하세요.');
+        }
+    }
+</script>
+</body>
+</html>

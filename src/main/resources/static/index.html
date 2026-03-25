@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>간단 방명록</title>
+    <style>
+        body { font-family: sans-serif; max-width: 600px; margin: 2rem auto; padding: 0 1rem; }
+        .header { display: flex; justify-content: space-between; align-items: center; }
+        form { display: flex; flex-direction: column; gap: 10px; border: 1px solid #ddd; padding: 1rem; border-radius: 8px; }
+        input, textarea { padding: 8px; border: 1px solid #ccc; border-radius: 4px; }
+        button { padding: 10px; background-color: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; }
+        button:hover { background-color: #0056b3; }
+        .btn-logout { background-color: #dc3545; padding: 5px 15px; font-size: 0.9rem; }
+        .btn-logout:hover { background-color: #c82333; }
+        #messages { margin-top: 2rem; }
+        .message-item { border-bottom: 1px solid #eee; padding: 1rem 0; }
+        .message-header { display: flex; justify-content: space-between; color: #666; font-size: 0.9rem; }
+        .message-content { margin-top: 8px; font-size: 1.1rem; }
+
+        /* 🔑 읽기 전용 입력창 스타일 (회색 배경으로 변경되어 수정 불가함을 표시) */
+        input[readonly] { background-color: #e9ecef; color: #495057; cursor: not-allowed; }
+    </style>
+</head>
+<body>
+
+<div class="header">
+    <h1>📝 미니 방명록</h1>
+    <button class="btn-logout" onclick="logout()">로그아웃</button>
+</div>
+
+<form id="guestbookForm">
+    <input type="text" id="name" placeholder="이름" readonly required>
+    <textarea id="message" placeholder="내용을 입력하세요" rows="3" required></textarea>
+    <button type="submit">등록하기</button>
+</form>
+
+<div id="messages"></div>
+
+<script>
+    // 1. 페이지 접속 시 브라우저 금고(로컬 스토리지)에서 토큰과 유저 이름 꺼내기
+    const token = localStorage.getItem('accessToken');
+    const username = localStorage.getItem('username');
+
+    // 토큰이 없으면 로그인 화면으로 쫓아냄
+    if (!token) {
+        alert('로그인이 필요한 서비스입니다.');
+        window.location.href = '/login.html';
+    } else {
+        // 🔑 2. 로그인한 유저 이름을 칸에 넣고 고정!
+        document.getElementById('name').value = username;
+    }
+
+    // 3. 로그아웃 함수 (금고를 비우고 로그인 화면으로 이동)
+    function logout() {
+        localStorage.removeItem('accessToken');
+        localStorage.removeItem('refreshToken');
+        localStorage.removeItem('username');
+        alert('로그아웃 되었습니다.');
+        window.location.href = '/login.html';
+    }
+
+    // 4. 방명록 목록 가져오기 함수
+    async function fetchMessages() {
+        try {
+            const response = await fetch('/api/guestbook', {
+                    method: 'GET', // 생략 가능하지만 명시적으로 적어줍니다.
+                    headers: {
+                        // 🔑 목록을 가져올 때도 문지기에게 토큰을 보여줘야 합니다!
+                        'Authorization': 'Bearer ' + token
+                    }
+                });
+                if (!response.ok) {
+                    throw new Error('목록을 불러올 권한이 없습니다.');
+                }
+            const messages = await response.json();
+
+            const messagesDiv = document.getElementById('messages');
+            messagesDiv.innerHTML = '';
+
+            messages.forEach(msg => {
+                const date = new Date(msg.createdAt).toLocaleString();
+                const item = `
+                    <div class="message-item">
+                        <div class="message-header">
+                            <strong>${escapeHtml(msg.name)}</strong>
+                            <span>${date}</span>
+                        </div>
+                        <div class="message-content">${escapeHtml(msg.message)}</div>
+                    </div>
+                `;
+                messagesDiv.innerHTML += item;
+            });
+        } catch (error) {
+            console.error('Error fetching messages:', error);
+        }
+    }
+
+    // 5. 방명록 등록 (글쓰기) 함수
+    document.getElementById('guestbookForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+
+        const name = document.getElementById('name').value;
+        const message = document.getElementById('message').value;
+
+        try {
+            const response = await fetch('/api/guestbook', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    // 🔑 핵심: 백엔드 문지기(Interceptor)에게 출입증(토큰)을 보여줍니다!
+                    'Authorization': 'Bearer ' + token
+                },
+                body: JSON.stringify({ name, message })
+            });
+
+            if (response.ok) {
+                document.getElementById('message').value = '';
+                fetchMessages(); // 성공하면 목록 새로고침
+            } else if (response.status === 401) {
+                // 출입증이 만료되었거나 가짜인 경우
+                alert('인증이 만료되었습니다. 다시 로그인해 주세요.');
+                logout();
+            } else {
+                alert('등록 실패!');
+            }
+        } catch (error) {
+            console.error('Error creating message:', error);
+        }
+    });
+
+    // XSS(해킹) 방지용 특수문자 변환 함수
+    function escapeHtml(text) {
+        if (!text) return text;
+        return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+    }
+
+    // 페이지 로드 시 목록 불러오기 실행 (토큰이 있을 때만)
+    if(token) {
+        fetchMessages();
+    }
+</script>
+</body>
+</html>
